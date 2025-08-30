@@ -1,9 +1,11 @@
 # backend (fast api)
 
 venv/
-.env/
-ENV/
+.env
 .venv/
+
+# 모델
+models/
 
 # Python 캐시
 __pycache__/
