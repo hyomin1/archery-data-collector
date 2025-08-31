@@ -4,8 +4,10 @@ venv/
 .env
 .venv/
 
-# 모델
-models/
+# 학습 모델
+weights/
+
+data/
 
 # Python 캐시
 __pycache__/

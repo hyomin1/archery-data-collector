@@ -3,17 +3,33 @@ from fastapi.responses import StreamingResponse
 from ultralytics import YOLO
 from collections import deque
 from dotenv import load_dotenv
+from models.corner_regressor import CornerRegressor
+from torchvision import transforms
 
 import cv2
 import time
 import threading
 import os
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 app = FastAPI()
 
 
-model = YOLO("models/best2.pt")
-model.to("cuda")
+arrow_model = YOLO("weights/best2.pt")
+arrow_model.to("cuda")
+
+target_model = YOLO("weights/target.pt")  # 과녁
+target_model.to("cuda")
+
+corner_model = CornerRegressor()
+corner_model.load_state_dict(
+    torch.load("weights/corner_regressor.pt", map_location="cpu")
+)
+corner_model.eval()
+
+transform = transforms.ToTensor()
 
 load_dotenv()  
 STREAM_URL = os.getenv("STREAM_URL")
@@ -30,7 +46,6 @@ stop_collect = False
 # -------------------------------
 from collections import deque
 import datetime
-
 def collect_frames():
     global stop_collect
     last_log_time = 0
@@ -38,10 +53,10 @@ def collect_frames():
     pre_seconds = 2   # 감지 전 2초
     post_seconds = 2  # 감지 후 2초
 
-    event_cooldown = 5  # 이벤트 최소 간격(초)
+    event_cooldown = 5  # 이벤트 최소 간격
     last_event_time = 0  # 마지막 이벤트 발생 시각
 
-    buffer = deque()  # FPS 읽기 전까지 maxlen 설정 안함
+    buffer = deque()  
     saving_post = 0
     save_queue = []
 
@@ -89,7 +104,7 @@ def collect_frames():
                 buffer.append(frame.copy())
 
                 try:
-                    results = model(frame, verbose=False)
+                    results = arrow_model(frame, verbose=False)
                     if len(results[0].boxes) > 0 and saving_post == 0:
                         now = time.time()
                         if now - last_event_time < event_cooldown:
@@ -150,6 +165,28 @@ def collect_frames():
 # -------------------------------
 #  모니터링 스트리밍
 # -------------------------------
+# 전역 변수: 과녁 코너 좌표 캐싱
+target_corners = None
+corner_lock = threading.Lock()
+
+def get_target_corners(frame):
+    """과녁 코너를 최초 1회만 CornerRegressor로 추정"""
+    global target_corners
+    with corner_lock:
+        if target_corners is None:  # 아직 추정 안 한 경우
+            frame_resized = cv2.resize(frame, (128, 128))
+            tensor = transform(frame_resized).unsqueeze(0)
+            with torch.no_grad():
+                preds = corner_model(tensor).cpu().numpy()[0]
+            h, w, _ = frame.shape
+            target_corners = [
+                (int(preds[i] * w), int(preds[i+1] * h))
+                for i in range(0, 8, 2)
+            ]
+            print("과녁 코너 좌표 고정:", target_corners)
+    return target_corners
+
+
 def generate_frames():
     cap = None
     try:
@@ -164,13 +201,48 @@ def generate_frames():
                 break
 
             try:
-                results = model(frame, verbose=False)
-                for box in results[0].boxes:
+                # --------------------
+                # 1) 과녁 탐지 + Corner CNN
+                # --------------------
+                t_results = target_model(frame, verbose=False)
+                for box in t_results[0].boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+
+                    # crop → CNN
+                    crop = frame[y1:y2, x1:x2]
+                    if crop.size == 0:
+                        continue
+                    crop_resized = cv2.resize(crop, (128, 128))
+                    tensor = transform(crop_resized).unsqueeze(0)
+
+                    with torch.no_grad():
+                        preds = corner_model(tensor).cpu().numpy()[0]
+
+                    # bbox 기준 좌표 복원
+                    corners = []
+                    for i in range(0, 8, 2):
+                        cx = int(x1 + preds[i]   * (x2 - x1))
+                        cy = int(y1 + preds[i+1] * (y2 - y1))
+                        corners.append((cx, cy))
+
+                    # 빨간 테두리
+                    for pt in corners:
+                        cv2.circle(frame, pt, 5, (0, 0, 255), -1)
+                    for j in range(4):
+                        cv2.line(frame, corners[j], corners[(j+1)%4], (0,0,255), 2)
+
+                # --------------------
+                # 2) 화살 탐지
+                # --------------------
+                a_results = arrow_model(frame, verbose=False)
+                for box in a_results[0].boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
-            except Exception as e:
-                print("YOLO 추론 에러(모니터링):", e)
 
+            except Exception as e:
+                print("추론 에러:", e)
+
+            # 스트리밍 전송
             _, buffer = cv2.imencode(".jpg", frame)
             yield (b"--frame\r\n"
                    b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n")
@@ -179,6 +251,9 @@ def generate_frames():
         if cap:
             cap.release()
         print("모니터링 세션 종료")
+
+
+
 
 
 # -------------------------------
