@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import transforms
+from app import config
 
 class CornerRegressor(nn.Module):
     def __init__(self):
@@ -18,3 +20,14 @@ class CornerRegressor(nn.Module):
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         return torch.sigmoid(self.fc2(x))
+
+def load_corner_regressor():
+    state = torch.load(config.CORNER_MODEL_PATH, map_location="cuda")
+    model = CornerRegressor().to("cuda")
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
+
+transform = transforms.ToTensor()

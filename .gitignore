@@ -4,6 +4,8 @@ venv/
 .env
 .venv/
 
+.vscode/
+
 # 학습 모델
 weights/
 
