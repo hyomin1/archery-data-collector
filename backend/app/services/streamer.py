@@ -84,8 +84,23 @@ def generate_frames():
                 # --------------------
                 a_results = arrow_model.predict(frame)
                 for box in a_results[0].boxes:
+                    # 좌표
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+    
+                    # 박스 확장 (예: 10픽셀씩 키우기)
+                    pad = 10
+                    x1, y1 = max(0, x1 - pad), max(0, y1 - pad)
+                    x2, y2 = x2 + pad, y2 + pad
+
+                    # 박스 그리기 (두께 4)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
+
+                    # confidence 표시
+                    conf = float(box.conf[0]) if box.conf is not None else 0
+                    label = f"{conf:.2f}"
+                    cv2.putText(frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+
 
             except Exception as e:
                 print("추론 에러:", e)
