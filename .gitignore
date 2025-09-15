@@ -9,7 +9,7 @@ venv/
 # 학습 모델
 weights/
 
-data/
+events/
 
 *.log
 
