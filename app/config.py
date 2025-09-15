@@ -26,6 +26,11 @@ ARROW_MODEL_PATH: str = os.getenv("ARROW_MODEL_PATH", "weights/best2.pt")
 TARGET_MODEL_PATH: str = os.getenv("TARGET_MODEL_PATH", "weights/target.pt")
 CORNER_MODEL_PATH: str = os.getenv("CORNER_MODEL_PATH", "weights/corner_regressor2.pt")
 
+
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
+ROBOFLOW_WORKSPACE = os.getenv("ROBOFLOW_WORKSPACE")
+ROBOFLOW_PROJECT = os.getenv("ROBOFLOW_PROJECT")
+
 # 이벤트 감지 관련 상수
 PRE_FRAMES = 4          # 이벤트 발생 전 확보할 프레임 수
 POST_FRAMES = 4         # 이벤트 발생 후 확보할 프레임 수
