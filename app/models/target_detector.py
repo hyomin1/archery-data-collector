@@ -1,5 +1,5 @@
 from ultralytics import YOLO
-from app import config
+from app.core import config
 
 # YOLO 기반 과녁 탐지 모델
 class TargetDetector:

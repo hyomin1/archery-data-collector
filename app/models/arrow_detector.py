@@ -1,5 +1,5 @@
 from ultralytics import YOLO
-from app import config
+from app.core import config
 
 # YOLO 기반 화살 탐지 모델
 class ArrowDetector:
@@ -9,6 +9,6 @@ class ArrowDetector:
         self.model.to("cuda")
         
 
-    def predict(self,frame, conf=0.45):
-        results = self.model(frame, verbose=False, conf=conf)
+    def predict(self,frame, conf=0.55, iou=0.4):
+        results = self.model(frame, verbose=False, conf=conf, iou=iou)
         return results
